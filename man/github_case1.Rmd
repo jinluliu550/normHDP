@@ -70,7 +70,10 @@ We use the following example (same as Simulation 1 in the main article) to demon
 
 ```{r eval = FALSE}
 
-##-- Run on 4 cores
+# Load Y_linear from data file
+load('data/Y_linear.RData')
+
+# Obtain posterior samples
 case1_mcmc <- normHDP_mcmc(Y = Y_linear,
                            J = 3,
                            number_iter = 3000,
