@@ -690,7 +690,8 @@ unique_parameters_mcmc <- function(mu_star_1_J,
       }
 
 
-      if(is.na(outcome) == TRUE | outcome == 0){
+      # Acceptance
+      if(is.na(outcome) == TRUE | outcome == 0 | log(mu_star_new) > 10){
         X_mu_phi_star_new <- X_mu_phi_star_old
         mu_star_new <- mu_star_old
         phi_star_new <- phi_star_old
