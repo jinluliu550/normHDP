@@ -1,22 +1,18 @@
 \name{local_marker_genes_plot}
 \alias{local_marker_genes_plot}
-\title{Plots of local marker genes}
+\title{Graph for the local marker genes}
+\description{
+The function outputs graphs for the local marker genes
+}
 \usage{
 local_marker_genes_plot(lmg_output)
 }
 \arguments{
-\item{lmg_output}{Output from function local_marker_genes.}
+\item{lmg_output}{direct output from function local_marker_genes().}
 }
 \value{
-Output contains 4 plots. Plot 1: relationship between absolute log-fold change and tail probabilities for mean expressions with threshold shown. Plot 2: A bar chart to show number of local differentially expressed genes for each cluster. Plot 3 and 4 are similar to the structure of the previous 2 plots, but to show relationship and counts of locally differentially dispersed genes.
-}
-\description{
-Plots of local marker genes.
+The function outputs four plots: plot 1 and 3 shows the scatter plot of absolute log-fold change against the tail probabilities corresponding to the mean expressions and dispersions, respectively, for each cluster. Local marker genes are shown in red and non-marker genes are shown in grey. Plot 2 and 4 are the bar-charts to summarize the total number of local marker genes for each cluster.
 }
 \examples{
-# Load data
-load('data/case1_local_marker.RData')
-
-# Plot
-local_marker_genes_plot(lmg_output = case1_local_marker)
+local_marker_genes_plot(lmg_output = lmg_data)
 }

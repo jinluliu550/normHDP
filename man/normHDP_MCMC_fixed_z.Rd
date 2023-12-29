@@ -1,31 +1,32 @@
-\name{normHDP_mcmc}
-\alias{normHDP_mcmc}
-\title{MCMC Simulation of unknown parameters}
-\description{
-Generate posterior samples of parameters of interests.
-}
+\name{normHDP_mcmc_fixed_z}
+\alias{normHDP_mcmc_fixed_z}
+\title{MCMC Simulation of unknown parameters with allocations fixed}
 \usage{
-normHDP_mcmc(Y,
-             J,
-             number_iter,
-             thinning = 5,
-             empirical = TRUE,
-             burn_in = 3000,
-             quadratic = FALSE,
-             iter_update = 100,
-             beta.mean = 0.06,
-             alpha_mu_2 = NULL,
-             adaptive_prop = 0.1,
-             BB_SIZE = TRUE,
-             print_Z = FALSE,
-             num.cores = 4,
-             save.only.z = FALSE,
-             baynorm.beta = NULL,
-             run.on.pc = TRUE)
+normHDP_MCMC_fixed_z(Y,
+                     Z,
+                     number_iter,
+                     thinning = 5,
+                     empirical = TRUE,
+                     burn_in = 3000,
+                     quadratic = FALSE,
+                     iter_update = 100,
+                     beta.mean = 0.06,
+                     alpha_mu_2 = NULL,
+                     adaptive_prop = 0.1,
+                     BB_SIZE = TRUE,
+                     num.cores = 4,
+                     baynorm.beta = NULL,
+                     auto.save = FALSE,
+                     auto.save.every.n = 0,
+                     auto.save.name = NULL,
+                     run.on.pc = TRUE)
+}
+\description{
+Due to the label switching characteristic of mixture models, we will need to run the following code to carry out posterior inferences.
 }
 \arguments{
 \item{Y}{input dataset of length d.}
-\item{J}{total number of components.}
+\item{Z}{the fixed allocation.}
 \item{number_iter}{total number of iterations to run.}
 \item{thinning}{an option to save a subset of the samples.}
 \item{burn_in}{the first number of iterations to ignore.}
@@ -39,13 +40,15 @@ normHDP_mcmc(Y,
 \item{num.cores}{number of processing cores.}
 \item{save.only.z}{an option to only save the estimated allocations.}
 \item{baynorm.beta}{an option to manually input the capture effiencices for empirical estimations.}
-\item{run.on.pc}{an option to run the algorthm on PC. Default is set to TRUE.}
+\item{auto.save}{an option to save parameter samples during the run.}
+\item{auto.save.every.n}{an option to save parameter samples at a fixed interval.}
+\item{auto.save.name}{name of the auto saved file.}
+\item{run.on.pc}{an option to run the algorithm on PC. Default is set to TRUE.}
 }
 \value{
 The function returns a list of the following items:
 \item{b_output}{samples of mean of regression slopes.}
 \item{alpha_phi_2_output}{samples of variance of dispersions.}
-\item{Z_output}{samples of allocations.}
 \item{P_J_D_output}{samples of dataset specific component probabilities.}
 \item{P_output}{samples of component probabilities.}
 \item{alpha_output}{samples of concentration parameters to control difference in component probabilities between datasets.}
@@ -57,22 +60,21 @@ The function returns a list of the following items:
 \item{G}{number of genes.}
 \item{D}{number of datasets.}
 \item{C}{number of cells in each dataset.}
+\item{Z}{the fixed allocation.}
+\item{J}{total number of clusters.}
 }
+
 \examples{
 
-# An example run with 3 components.
+# Example run
 
-normHDP_mcmc(Y = Y,
-             J = 3,
-             number_iter = 3000,
-             thinning = 5,
-             empirical = TRUE,
-             burn_in = 1000,
-             quadratic = FALSE,
-             iter_update = 100,
-             beta.mean = 0.72,
-             alpha_mu_2 = 20,
-             print_Z = TRUE,
-             num.cores = 4)
+normHDP_mcmc_post(Y = Y,
+                  Z = Z_opt,
+                  number_iter = 5000,
+                  thinning = 5,
+                  empirical = TRUE,
+                  burn_in = 3000,
+                  quadratic = TRUE,
+                  num.cores = 4)
 
 }
