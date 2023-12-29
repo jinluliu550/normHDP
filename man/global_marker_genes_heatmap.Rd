@@ -1,26 +1,21 @@
 \name{global_marker_genes_heatmap}
 \alias{global_marker_genes_heatmap}
-\title{Heatmaps of Global Marker Genes}
+\title{Heat-maps of the global marker genes}
 \usage{
 global_marker_genes_heatmap(gmg_output,
                             normHDP_post_output)
 }
 \arguments{
-\item{gmg_output}{Output from function global_marker_genes.}
-\item{normHDP_post_output}{Output from function normHDP_mcmc_post.}
+\item{gmg_output}{direct output from function global_marker_genes().}
+\item{normHDP_post_output}{direct output from function normHDP_MCMC_fixed_z().}
 }
 \value{
-The output contains 4 plots: The first plot show the posterior mean of mean expressions with genes reordered by tail probabilities; genes above the horizontal dashed line are the global differentially expressed genes. Plot 2 has the same structure as plot 1, but for dispersions. Plot 3 only contains global DE genes and mean expressions shown in the hea map are normalized to have zero mean across all clusters for each gene. Plot 4 has the same structure as plot 3, but for dispersions.
+The function outputs 4 graphs: graph 1 and 2 are the heat-maps for the estimated mean expressions and dispersions, respectively, with genes reordered by the tail probabilities. Global marker and non-global marker genes are separated by a horizontal line. Graph 3 and 4 are the heat-maps with only the global marker genes, genes are also reordered by the tail probabilities and standardized to have the mean of unique parameters for each gene equal to zero.
 }
 \description{
-Heatmaps of global marker genes to identify potential patterns.
+Heat-maps of the global marker genes.
 }
 \examples{
-# Load data
-load('data/case1_global_marker.RData')
-load('data/case1_mcmc_post.RData')
-
-# Heatmap
-global_marker_genes_heatmap(gmg_output = case1_global_marker,
-                            normHDP_post_output = case1_mcmc_post)
+global_marker_genes_heatmap(gmg_output = gmg_df,
+                            normHDP_post_output = normHDP_post_MCMC)
 }

@@ -1,22 +1,18 @@
 \name{global_marker_genes_plot}
 \alias{global_marker_genes_plot}
-\title{Summary of Global Marker Genes}
+\title{Graph for the global marker genes}
+\description{
+The function outputs graphs for the global marker genes
+}
 \usage{
 global_marker_genes_plot(gmg_output)
 }
 \arguments{
-\item{gmg_output}{Output from function global_marker_genes.}
+\item{gmg_output}{direct output from function global_marker_genes().}
 }
 \value{
-Returns three plots: The first plot shows the relationship between absolute log-fold change and tail probabilities corresponding to mean expressions. Genes above the horizontal line are classified as global differentially expressed genes, and vice versa. Plot 2 has the same sturcture as plot 1, but for dispersions. Plot 3 summarizes the number of genes with single and both global characteristics.
-}
-\description{
-Summary of global marker genes.
+The function outputs three graphs: graph 1 and 2 plots the aboslute log-fold change against tail probabilities corressponding to the mean expressions and dispersions, respectively. Graph 3 is a bar-chart summarizing the number of each type of global marker genes.
 }
 \examples{
-# Load data
-load('data/case1_global_marker.RData')
-
-# Plot
-global_marker_genes_plot(gmg_output = case1_global_marker)
+global_marker_genes_plot(gmg_output = gmg_data)
 }
