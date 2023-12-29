@@ -1,16 +1,10 @@
-#' Plot to show posterior similarity between cells.
-#' 
-#' @param psm.ind Posterior similarity matrix between 2 datasets or within the same dataset. This is equivalent to the
-#' first item of the output from function similarity_matrix.
-#' @param psm.tot Posterior similarity matrix between cells in all datasets.
-#' @param method Method used to reorder cells, default is to set method to 'complete'.
-#' @param ... All other controls for the plot.
-#' @return The output includes 2 plots. Plot 1: Similarity between cells within distinguishing between datasets.
-#' Plot 2: similarity between cells with cells from different datasets separated by horizontal and vertical lines.
-#' @export
-plotpsm <- function(psm.ind, 
+
+plotpsm <- function(psm.ind,
                     psm.tot,
-                    method="complete",...){
+                    method="complete",
+                    plot1.name,
+                    plot2.name,
+                    ...){
 
   if(any(psm.tot !=t(psm.tot)) | any(psm.tot >1) | any(psm.tot < 0) | sum(diag(psm.tot)) != nrow(psm.tot) ){
     stop("psm.tot must be a symmetric matrix with entries between 0 and 1 and 1's on the diagonals")}
@@ -25,10 +19,14 @@ plotpsm <- function(psm.ind,
   psm_hc[1:n,]=psm_hc[hc$order,]
   psm_hc[,1:n]=psm_hc[,hc$order]
 
-  image(1:n,
-        1:n,
-        1-psm_hc,
-        col=heat.colors(20), ...)
+  png(paste0(plot1.name, '.png'))
+  image.plot(1:n,
+             1:n,
+             psm_hc,
+             col=rev(heat.colors(100)), ...)
+  dev.off()
+
+
 
   # Dimension of datasets
   D <- length(psm.ind)
@@ -71,8 +69,17 @@ plotpsm <- function(psm.ind,
   }
 
   n.max <- max(n)
-  image(1:n.max, 1:n.max, 1-psm_matrix_output, col=heat.colors(100), ...)
+
+  png(paste0(plot2.name, '.png'))
+  image.plot(1:n.max,
+             1:n.max,
+             psm_matrix_output,
+             col=rev(heat.colors(100)),
+             ...)
+
+
   abline(v=n[-c(1,D+1)], lwd=3)
-  abline(h=(max(n)-n)[-c(1,D+1)], lwd=3)
+  abline(h=(max(n)-n)[-c(1,D+1)]+0.5, lwd=3)
+  dev.off()
 }
 

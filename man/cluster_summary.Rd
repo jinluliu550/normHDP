@@ -1,27 +1,24 @@
-\name{opt.clust}
-\alias{opt.clust}
-\title{Point estimate of allocations}
+\name{cluster_summary}
+\alias{cluster_summary}
+\title{Summary of the number of cells in each cluster}
 \usage{
-opt.clust(normHDP_output,
-          psm_output)
+cluster_summary(Z,
+                data.name)
 }
 \arguments{
-\item{normHDP_output}{Output from function normHDP_mcmc.}
-\item{psm_output}{Output from function similarity_matrix.}
+\item{Z}{the point estimate of clustering.}
+\item{data.name}{a vector of names of each data.}
 }
 \value{
-Point estimate of allocations, a list of length D, where D is the total number of datasets.
+The function outputs 2 plot: plot 1 is a bar-chart to show the number of cells in each cluster. Plot 2 shows the proportion of data 1 cells and data 2 cells in each cluster, and compare with the overall proportion. Note plot 2 is only shown for cases with exactly 2 datasets.
 }
 \description{
-To obtain a point estimate of optimal clustering which minimizes the Variation of Information using all allocation samples.
+The function summarizes the point estimate of clustering.
 }
 \examples{
-# Load data
-load('data/case1_mcmc.RData')
-load('data/case1_psm.RData')
+# An example with 2 datasets:
 
-# Obtain posterior point estimate of Z
-# Saved as case1_Z_estimate in the data file
-opt.clust(normHDP_output = case1_mcmc,
-          psm_output =  case1_psm)
+cluster_summary(Z = Z_opt,
+                data.name = c('data 1', 'data 2'))
+
 }
