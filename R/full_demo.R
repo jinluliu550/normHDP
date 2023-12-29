@@ -1,0 +1,345 @@
+# A full demonstration of how to use the normHDP model
+
+# Specify width and length: width is the number of chains to run
+# and length is the total number of iterations in each run. We first obtain posterior samples of
+# the allocations (z). Below is an example with 100 chains and 100 iterations in each chain,
+# 30 components and running with 5 cores.
+
+Depth <- 100
+Width <- 100
+
+Z_trace_all <- lapply(1:Width,
+                      function(w){
+
+                        normHDP_mcmc(Y = Y,
+                                     J = 30,
+                                     number_iter = Depth,
+                                     thinning = 1,
+                                     burn_in = 0,
+                                     quadratic = TRUE,
+                                     print_Z = TRUE,
+                                     num.cores = 4,
+                                     save.only.z = TRUE,
+                                     run.on.pc = TRUE)
+
+                      })
+
+
+
+
+
+
+#------------------------------------------------ General analysis ------------------------------------------
+
+# Function below computes the optimized clustering estimate
+Z_opt <- concensus_clustering(Z_output = Z_trace_all,
+                              num.cores = 4,
+                              run.on.pc = TRUE)
+
+# Clustering estimate
+Z_opt$cluster.estimate
+
+# Posterior similarity matrix: the first item shows the posterior
+# similarity between cells within the one dataset, or across two datasets.
+# The second item shows the posterior similarity between cells from all
+# datasets
+Z_opt$psm
+
+# Heat map to show posterior similarity matrix
+# The function outputs 2 heat-maps. The first heat-map considers
+# cells from different datasets separately. The second heat-map
+# considers cells from all datasets together. Also need to give name
+# to each of the two plots. Ideally, for datasets with a large number of
+# observations, we need to output the heat-map before viewing.
+plotpsm(psm.ind = Z_opt$psm$psm.within,
+        psm.tot = Z_opt$psm$psm.combined,
+        method = 'complete',
+        plot1.name = 'psm1',
+        plot2.name = 'psm2',
+        xlab = 'Cell',
+        ylab = 'Cell')
+
+# Plots to summarize the clustering estimate. In the case when the number of datasets
+# equal to 2, the function outputs 2 plots: plot 1 to show the number of cells
+# in each cluster, and plot 2 to show the proportion of cells from each dataset
+# in each cluster. In the case when the number of dataset is not equal to two, only
+# plot 1 will be shown
+cluster_summary(Z = Z_opt$cluster.estimate,
+                data.name = c('data1',
+                              'data2'))
+
+# Based on the estimated z, we can obtain samples of all other parameters.
+# The code below uses 10 cores for parallel computing. Need to check the
+# number of available cores before running the code below.
+MCMC_run <- normHDP_mcmc_fixed_z(Y = Y,
+                                 Z = Z_opt$cluster.estimate,
+                                 number_iter = 5000,
+                                 thinning = 5,
+                                 burn_in = 2000,
+                                 quadratic = TRUE,
+                                 num.cores = 4,
+                                 iter_update = 1,
+                                 run.on.pc = TRUE)
+
+# To observe the effect of changing chain width and length on the mean absolute
+# difference of posterior similarity matrix
+concensus_clustering_plot(Z_output = Z_trace_all,
+                          W.breaks = c(10,30,50,70,90,100),
+                          L.breaks = c(10,20,30,40,50,60,70,80,90,100),
+                          num.cores = 10,
+                          run.on.pc = TRUE)
+
+# Compare posterior estimated capture efficiency with bayNorm estimated
+# capture efficiency
+beta_compare(Y = Y,
+             normHDP_post_output = MCMC_run,
+             data.names = c('data1','data2'))
+
+# Difference in component probabilities between mouse in the case when there are
+# only 2 datasets, clusters are grouped into 3 types; over-represented, under-represented
+# and stable clusters
+difference_in_component <- difference_in_p_jd2(p_jd_trace = MCMC_run$P_J_D_output)
+
+# Distribution of posterior estimated capture efficiency for each cluster
+beta_analysis(normHDP_post_output = MCMC_run,
+              cluster.labels = difference_in_component$all_obs)
+
+
+# Posterior relationship between mean expressions and dispersions on the log-scale
+# for each cluster.
+mu_and_phi_plot(normHDP_post_output = MCMC_run,
+                row.n = 3)
+
+
+
+
+#------------------------------------------- Classification of global markers ---------------------------------------
+
+gmg_df <- global_marker_genes(normHDP_post_output = MCMC_run,
+                              threshold = list('mu' = 2.5,
+                                               'phi' = 2.5),
+                              num.cores = 4,
+                              run.on.pc = TRUE)
+
+
+# The function output a list of 4 items:
+#
+# 1) marker_DE: data frame to show the tail probability, absolute LFC and classification of
+# global marker genes using estimated mean expressions.
+# 2) marker_DD: data frame to show the tail probability, absolute LFC and classification of
+# global marker genes using estimated dispersions.
+# 3) alpha_M: threshold for the classification of global differentially expressed genes.
+# 4) alpha_D: threshold for the classification of global differentially dispersed genes.
+
+
+# Scatter plot to compare absolute LFC and tail probabilities. In addition,
+# the function also outputs a bar chart to summarize the number of each
+# type of the marker genes
+global_marker_genes_plot(gmg_output = gmg_df)
+
+# The function outputs 4 graphs. The first 2 graphs shows the estimated mean
+# expression and dispersions reordered by the tail probabilities. The final
+# 2 graphs shows the standardized estimated mean expressions and dispersions
+# of global marker genes.
+global_marker_genes_heatmap(gmg_output = gmg_df,
+                            normHDP_post_output = MCMC_run)
+
+
+
+
+
+
+
+
+
+
+
+
+#--------------------------------------------- Classification of local markers ------------------------------------
+
+lmg_df <- local_marker_genes(normHDP_post_output = MCMC_run,
+                             threshold = list('mu' = 0.8,
+                                              'phi' = 0.8),
+                             num.cores = 4,
+                             run.on.pc = TRUE)
+
+# The function output a list of 4 items:
+#
+# 1) marker_DE: data frame to show the tail probability, absolute LFC and classification of
+# local marker genes using estimated mean expressions.
+# 2) marker_DD: data frame to show the tail probability, absolute LFC and classification of
+# local marker genes using estimated dispersions.
+# 3) alpha_M: threshold for the classification of local differentially expressed genes.
+# 4) alpha_D: threshold for the classification of local differentially dispersed genes.
+
+
+# Scatter plot to compare absolute LFC and tail probabilities in the
+# local marker genes case. Bar chart to show the number of local marker
+# genes in each cluster
+local_marker_genes_plot(lmg_output = lmg_df)
+
+# Heat map of estimated mean expressions and dispersions for the local
+# marker genes in each cluster. Genes are reordered by the tail probabilities.
+local_marker_genes_heatmap(lmg_output = lmg_df,
+                           normHDP_post_output = MCMC_run)
+
+
+
+
+
+
+
+#------------------------------------------- Posterior estimated latent counts ---------------------------------
+
+latent_counts_Y <- latent_counts(Y = Y,
+                                 normHDP_post_output = MCMC_run,
+                                 gmg_output = gmg_df,
+                                 num.cores = 4,
+                                 run.on.pc = TRUE)
+
+# In the case when the global marker genes detail is not given, the function output 6 items:
+#
+# 1) matrix.output: the estimated latent counts with reordered cells by the estimated clustering.
+# 2) index.solid: index used to separate cells from different clusters when plotting.
+# 3) index.dashed: index used to separate cells from different datasets when plotting.
+# 4) Y_latent: estimated latent count without reordering of cells and genes.
+# 5) Z: the optimal clustering
+# 6) G: total number of genes
+#
+# In the case when the global marker genes detail is given, then item 1) from the above list is
+# replaced by:
+#
+# 1) Y_latent_DE: the estimated latent counts with reordered cells and genes by tail probabilities
+# of mean expressions.
+# 2) Y_latent_DD: the estimated latent counts with reordered cells and genes by tail probabilities
+# of dispersions.
+# 3) DE_number: total number of global differentially expressed genes.
+# 4) DD_number: total number of global differentially dispersed genes.
+
+# Heat-map of case with global marker genes detail not given
+latent_counts_plot(latent_counts_output = latent_counts_Y,
+                   file.name.1 = 'latent_counts')
+
+# Heat-map of case with global marker genes detail given
+latent_counts_plot(latent_counts_output = latent_counts_Y,
+                   file.name.1 = 'latent_counts_DE',
+                   file.name.2 = 'latent_counts_DD')
+
+
+
+
+#---------------------------------------- Heat-map for the observed counts ---------------------------------
+
+observed_counts_df <- observed_counts(normHDP_post_output = MCMC_run,
+                                      Y = Y,
+                                      gmg_output = gmg_df)
+
+
+# In the case when the global marker genes detail is not given, the function output 4 items:
+#
+# 1) matrix.output: the estimated latent counts with reordered cells by the estimated clustering.
+# 2) index.solid: index used to separate cells from different clusters when plotting.
+# 3) index.dashed: index used to separate cells from different datasets when plotting.
+# 4) Z: optimized allocation
+#
+# In the case when the global marker genes detail is given, then item 1) from the above list is
+# replaced by:
+#
+# 1) Y_DE: observed counts with reordered cells and genes by tail probabilities
+# of mean expressions.
+# 2) Y_DD: observed counts with reordered cells and genes by tail probabilities
+# of dispersions.
+# 3) DE_number: total number of global differentially expressed genes.
+# 4) DD_number: total number of global differentially dispersed genes.
+
+# In the case when the global marker genes detail is given, the function outputs 2 heat-maps,
+# hence need to give 2 names. In the case when the global marer genes detail is not given, then
+# only file.name.1. needs to be given.
+observed_counts_plot(observed_counts_output = observed_counts_df,
+                     file.name.1 = 'DE_reorder.png',
+                     file.name.2 = 'DD_reorder.png')
+
+
+
+
+
+
+
+
+#----------------------------------------- t-SNE --------------------------------------------
+
+# t-SNE plot using all genes
+tsne_plot(normHDP_post_output = MCMC_run,
+          Y_latent = latent_counts_Y$Y_latent,
+          Y = Y)
+
+# t-SNE plot using global marker genes
+tsne_global_marker_genes(gmg_output = gmg_df,
+                         Y = Y,
+                         Y_latent = latent_counts_Y$Y_latent,
+                         normHDP_post_output = MCMC_run)
+
+
+
+
+
+
+
+
+
+#----------------------------------------- Posterior predictive checks -------------------------------------------
+
+# Mixed posterior predictive check: simulate dispersion using all the dependent parameters under log-Normal.
+# Standard posterior predictive check: using posterior draws of dispersions.
+
+# Single replicated dataset - mixed posterior predictive check
+ppc_single_plot(normHDP_post_output = MCMC_run,
+                Y = Y,
+                data.name = c('data1', 'data2'))
+
+
+# Multiple replicated datasets - mixed posterior predictive check
+ppc_multiple_df <- ppc_multiple(normHDP_post_output = MCMC_run,
+                                Y = Y,
+                                number_rep = 100,
+                                num.cores = 4,
+                                run.on.pc = TRUE)
+
+ppc_multiple_plot(ppc_multiple_df = ppc_multiple_df,
+                  title = c('data1', 'data2'))
+
+# Multiple replicated dataset, calculate standard p-value of posterior predictive check
+ppp_df_standard <- ppp_calculation(normHDP_post_output = MCMC_run,
+                                   Y = Y,
+                                   num.cores = 4,
+                                   rep.number = 100,
+                                   type = 'standard',
+                                   run.on.pc = TRUE)
+
+# Multiple replicated dataset, calculate mixed p-value of posterior predictive check
+ppp_df_mixed <- ppp_calculation(normHDP_post_output = MCMC_run,
+                                Y = Y,
+                                num.cores = 4,
+                                rep.number = 100,
+                                type = 'mixed',
+                                run.on.pc = TRUE)
+
+
+# Plot of distribution of p-values
+p_value_plot(ppc_output = ppp_df_standard)
+p_value_plot(ppc_output = ppp_df_mixed)
+
+
+
+
+
+
+#----------------------------------------- Important genes ----------------------------------------
+
+# Heat-map of important genes
+
+# Suppose the vector of important genes and the list of genes in Y are given
+heatmap_important_genes(important_genes = important_genes,
+                        normHDP_post_output = MCMC_run,
+                        gene_list = Y_genes)
+

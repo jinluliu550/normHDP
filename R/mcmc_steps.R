@@ -1,14 +1,4 @@
 
-#' Simulation of regression hyper-parameters
-#'
-#' @param mu_star_1_J mean expression matrix.
-#' @param phi_star_1_J dispersion matrix.
-#' @param m_b Fixed parameter in prior to model slope between log mean expression and dispersion.
-#' @param v_1 Fixed parameter in prior, shape parameter of the prior for alpha_phi_2.
-#' @param v_2 Fixed parameter in prior, scale parameter of the prior for alpha_phi_2.
-#' @param quadratic Relationship between mean expressions and dispersion on the log-scale. Default setting is to assume quadratic is FALSE.
-#' @return A list of 2 items: estimated variance (alpha_phi_2) and the regression parameter (b).
-#' @export
 mean_dispersion_mcmc <- function(mu_star_1_J,
                                  phi_star_1_J,
                                  m_b,
@@ -69,23 +59,14 @@ mean_dispersion_mcmc <- function(mu_star_1_J,
 }
 
 
-#' Simulation of allocations
-#'
-#' @param P_J_D Dataset-specific component probability.
-#' @param mu_star_1_J Mean expression matrix.
-#' @param phi_star_1_J Dispersion matrix.
-#' @param Y Input dataset.
-#' @param Beta Capture efficiencies.
-#' @param iter_num The iteration number of the current run.
-#' @return A list of 2 items: The allocation of all cells (Z, a list of length D, each with a vector of length C[d]) and the allocation probability of
-#' each cell to the assigned cluster (allocation.prob, same structure as Z).
-#' @export
 allocation_variables_mcmc <- function(P_J_D,
                                       mu_star_1_J,
                                       phi_star_1_J,
                                       Y,
                                       Beta,
-                                      iter_num){
+                                      iter_num,
+                                      num.cores,
+                                      run.on.pc = TRUE){
 
   # Create an empty list
   D <- length(Y)
@@ -93,74 +74,124 @@ allocation_variables_mcmc <- function(P_J_D,
   J <- nrow(P_J_D)
   G <- ncol(mu_star_1_J)
 
-  ## Initialize Z
+  breaks <- lapply(1:D,
+                   function(d) round(seq(from = 0,
+                                         to = C[d],
+                                         length.out = num.cores + 1)))
+
+  Y_truncate <- lapply(1:D,
+                       function(d){
+
+                         lapply(1:num.cores,
+                                function(i){
+
+                                  Y[[d]][,(breaks[[d]][i]+1):breaks[[d]][i+1]]
+                                })
+                       })
+
+  Y_truncate_C <- lapply(1:D,
+                         function(d){
+
+                           sapply(1:num.cores,
+                                  function(i) length((breaks[[d]][i]+1):breaks[[d]][i+1]))
+                         })
+
   Z <- NULL
-  allocation.prob <- NULL
 
   for(d in 1:D){
 
-    ##-- Put Y into an array
-    Y_array <- array(0, c(G, C[d], J))
-    for(j in 1:J) Y_array[, , j] <- as.matrix(Y[[d]])
+    if(run.on.pc == FALSE){
 
-    ##-- Put phi into an array
-    phi_array <- array(0, c(G, C[d], J))
-    for(c in 1:C[d]) phi_array[, c, ] <- as.matrix(t(phi_star_1_J))
+      cl <- makeCluster(num.cores,
+                        type = "FORK")
 
-    ##-- Put mu into an array
-    mu_array <- array(0, c(G, C[d], J))
-    for(c in 1:C[d]) mu_array[, c, ] <- as.matrix(t(mu_star_1_J))
+    }else{
 
-    ##-- Put Beta into an array
-    Beta_array <- array(0, c(G, C[d], J))
-    for(c in 1:C[d])Beta_array[, c, ] <- matrix(Beta[[d]][c], nrow = G, ncol = J)
+      cl <- makeCluster(num.cores)
 
-    ##-- Compute mu x Beta
-    muBeta_array <- array(as.vector(mu_array)*as.vector(Beta_array),
-                          c(G, C[d], J))
+    }
 
-    rm(mu_array, Beta_array)
+    registerDoParallel(cl)
 
-    ##-- Log probability for each gene, component and cell
-    output.log <- array(dnbinom(as.vector(Y_array),
-                                mu = as.vector(muBeta_array),
-                                size = as.vector(phi_array),
-                                log = TRUE),
-                        c(G, C[d], J))
+    loop.result <- foreach(i = 1:num.cores,
 
-    ##-- Log probability sum over all genes + prior
-    LP.matrix <- apply(output.log, c(2,3), sum)
-    LP.matrix <- t(apply(LP.matrix, 1, function(x) x + as.vector(log(P_J_D[,d]))))
+                           .packages = c('base',
+                                         'stats')) %dopar% {
 
-    ##-- Find the maximum of LP.matrix for each gene (row)
-    nc <- -apply(LP.matrix, 1, max)
+                                           ##-- Put Y into an array
+                                           Y_array <- array(as.matrix(Y_truncate[[d]][[i]]),
+                                                            c(G, Y_truncate_C[[d]][i], J))
 
-    ##-- Lp + nc
-    LP_plus_nc <- LP.matrix + matrix(nc, nrow = C[d], ncol = J)
 
-    ##-- Allocation probability for cell c in dataset d
-    P <- t(apply(LP_plus_nc, 1, function(x) exp(x)/sum(exp(x))))
+                                           ##-- Put phi into an array
+                                           phi_array <- array(0, c(G, Y_truncate_C[[d]][i], J))
+                                           for(c in 1:Y_truncate_C[[d]][i]) phi_array[, c, ] <- as.matrix(t(phi_star_1_J))
 
-    ##-- For each row, obtain a sample from posterior
-    Z[[d]] <- apply(P, 1, function(x) rcat(n = 1, prob = x))
 
-    ##-- Allocation probability
-    allocation.prob[[d]] <- sapply(1:C[d], function(c) P[c,Z[[d]][c]])
+                                           ##-- Put mu into an array
+                                           mu_array <- array(0, c(G, Y_truncate_C[[d]][i], J))
+                                           for(c in 1:Y_truncate_C[[d]][i]) mu_array[, c, ] <- as.matrix(t(mu_star_1_J))
+
+
+                                           ##-- Put Beta into an array
+                                           Beta_array <- array(0, c(G, Y_truncate_C[[d]][i], J))
+
+                                           for(c in 1:Y_truncate_C[[d]][i]){
+
+                                             Beta_array[, c, ] <- matrix(Beta[[d]][(breaks[[d]][i]+1):breaks[[d]][i+1]][c],
+                                                                         nrow = G,
+                                                                         ncol = J)
+                                           }
+
+                                           ##-- Compute mu x Beta
+                                           muBeta_array <- array(as.vector(mu_array)*as.vector(Beta_array),
+                                                                 c(G, Y_truncate_C[[d]][i], J))
+
+                                           rm(mu_array, Beta_array)
+
+
+                                           ##-- Log probability for each gene, component and cell
+                                           output.log <- array(dnbinom(as.vector(Y_array),
+                                                                       mu = as.vector(muBeta_array),
+                                                                       size = as.vector(phi_array),
+                                                                       log = TRUE),
+                                                               c(G, Y_truncate_C[[d]][i], J))
+
+
+
+                                           ##-- Log probability sum over all genes + prior
+                                           LP.matrix <- apply(output.log, c(2,3), sum)
+                                           LP.matrix <- t(apply(LP.matrix, 1, function(x) x + as.vector(log(P_J_D[,d]))))
+
+                                           ##-- Find the maximum of LP.matrix for each gene (row)
+                                           nc <- -apply(LP.matrix, 1, max)
+
+                                           ##-- Lp + nc
+                                           LP_plus_nc <- LP.matrix + matrix(nc, nrow = Y_truncate_C[[d]][i], ncol = J)
+
+
+
+                                           ##-- Allocation probability for cell c in dataset d
+                                           P <- t(apply(LP_plus_nc, 1, function(x) exp(x)/sum(exp(x))))
+
+                                           ##-- For each row, obtain a sample from posterior
+                                           Z_d_i <- apply(P, 1, function(x) rcat(n = 1, prob = x))
+
+                                           return(Z_d_i)
+
+                                         }
+    stopCluster(cl)
+
+    Z[[d]] <- unlist(loop.result)
+
+
   }
 
-  ##-- Return Z and allocation.prob
-  return(list('Z' = Z,
-              'allocation.prob' = allocation.prob))
+  # Register Cores
+
+  return(list('Z' = Z))
 }
 
-
-#' Simulation of dataset-specific component probabilities
-#'
-#' @param Z Allocation of all cells.
-#' @param P Component probabilities.
-#' @param alpha Hyper-parameter to indicate variation of dataset-specific component probabilities between datasets.
-#' @return Dataset specific component probability; a matrix with J rows and D columns.
-#' @export
 dataset_specific_mcmc <- function(Z,
                                   P,
                                   alpha){
@@ -187,14 +218,6 @@ dataset_specific_mcmc <- function(Z,
 }
 
 
-#' Posterior density of the component probabilities
-#'
-#' @param P Component probabilities.
-#' @param P_J_D Dataset specific component probabilities.
-#' @param alpha_zero Hyper-parameter for the component probabilities.
-#' @param alpha Hyper-parameters for the dataset specific component probabilities.
-#' @return The log probability of posterior density of the component probabilities.
-#' @export
 component_log_prob <- function(P,
                                P_J_D,
                                alpha_zero,
@@ -215,20 +238,6 @@ component_log_prob <- function(P,
 }
 
 
-#' Simulation of component probabilities
-#'
-#' @param P Component probabilities.
-#' @param P_J_D Dataset specific component probabilities.
-#' @param alpha_zero Hyper-parameter for the component probabilities.
-#' @param alpha Hyper-parameters for the dataset specific component probabilities.
-#' @param covariance Covariance structure of the component probabilities.
-#' @param mean_x Mean of component probabilities.
-#' @param tilde_s Sum of cross products of the component probabilities.
-#' @param iter_num The iteration number of the current run.
-#' @param adaptive_prop Additional variance when simulating new values.
-#' @return A list of 5 items: the new component probabilities; updated tilde_s by adding the new observation; updated mean_x; updated
-#' covariance structure; and an indicator to indicate whether the value simulated in the current iteration is accepted.
-#' @export
 component_probabilities_mcmc <- function(P,
                                          P_J_D,
                                          alpha_zero,
@@ -254,7 +263,7 @@ component_probabilities_mcmc <- function(P,
   n <- iter_num
 
   # Adaptive step - g0 = 100
-  if(n <= 100){
+  if(n <= 20){
     X_new <- rmvnorm(n=1, mean = X_d_old, sigma = diag(x=1, nrow=J-1, ncol=J-1))
 
   }else{
@@ -297,13 +306,6 @@ component_probabilities_mcmc <- function(P,
 }
 
 
-#' posterior density of alpha
-#'
-#' @param P Component probabilities.
-#' @param P_J_D Dataset specific component probabilities.
-#' @param alpha Hyper-parameters for the dataset specific component probabilities.
-#' @return posterior density of alpha on the log-scale.
-#' @export
 alpha_log_prob <- function(P_J_D,
                            P,
                            alpha){
@@ -321,19 +323,6 @@ alpha_log_prob <- function(P_J_D,
 }
 
 
-#' Simulation of alpha
-#'
-#' @param P Component probabilities.
-#' @param P_J_D Dataset specific component probabilities.
-#' @param alpha Hyper-parameters for the dataset specific component probabilities.
-#' @param X_mean Mean of alpha.
-#' @param M_2 Sum of square differences between observation and mean.
-#' @param variance Variance of alpha.
-#' @param iter_num The iteration number of the current run.
-#' @param adaptive_prop Additional variance when simulating new values.
-#' @return A list of 5 items: the new alpha; updated X_mean; updated M_2; updated variance and an indicator to indicate
-#' whether the new simulation is accepted.
-#' @export
 alpha_mcmc <- function(P_J_D,
                        P,
                        alpha,
@@ -357,7 +346,7 @@ alpha_mcmc <- function(P_J_D,
 
   # Apply AMH based on the iterative number of the current iteration
   # to simulated new value of X
-  if(n <= 100){
+  if(n <= 20){
     X_new <- rnorm(n = 1, mean = X_d_old, sd = 1)
   }else{
     X_new <- rnorm(n = 1, mean = X_d_old, sd = sqrt(2.4^2*(variance_old + adaptive_prop)))
@@ -395,12 +384,6 @@ alpha_mcmc <- function(P_J_D,
 }
 
 
-#' Posterior density of alpha_zero
-#'
-#' @param P Component probabilities.
-#' @param alpha_zero Hyper-parameter for the component probabilities.
-#' @return posterior density of alpha_zero on the log-scale.
-#' @export
 alpha_zero_log_prob <- function(P,
                                 alpha_zero){
 
@@ -415,18 +398,6 @@ alpha_zero_log_prob <- function(P,
 }
 
 
-#' Simulation of alpha_zero
-#'
-#' @param P Component probabilities.
-#' @param alpha_zero Hyper-parameter for the component probabilities.
-#' @param X_mean Mean of alpha_zero.
-#' @param M_2 Sum of square differences between observation and mean.
-#' @param variance Variance of alpha_zero.
-#' @param iter_num The iteration number of the current run.
-#' @param adaptive_prop Extra variation.
-#' @return A list of 5 items: the new alpha_zero; updated mean; updated M_2; updated variance and an indicator
-#' to indicate whether the new simulation is accepted.
-#' @export
 alpha_zero_mcmc <- function(P,
                             alpha_zero,
                             X_mean,
@@ -447,7 +418,7 @@ alpha_zero_mcmc <- function(P,
   X_mean_old <- X_mean
 
   # adaptive MH
-  if(n <= 100){
+  if(n <= 20){
     X_new <- rnorm(n = 1, mean = X_d_old, sd = 1)
   }else{
     X_new <- rnorm(n = 1,mean = X_d_old, sd = sqrt(2.4^2*(variance_old + adaptive_prop)))
@@ -484,21 +455,6 @@ alpha_zero_mcmc <- function(P,
               'accept' = accept))
 }
 
-#' Posterior density of mean expressions and dispersion
-#'
-#' @param mu_star Mean expression for component j and gene g.
-#' @param phi_star Dispersion for component h and gene g.
-#' @param Z Allocations.
-#' @param b Relationship between mean expressions and dispersions.
-#' @param alpha_phi_2 Variance for dispersion given mean expressions.
-#' @param Y Dataset.
-#' @param Beta Capture efficiency.
-#' @param j Index of the component.
-#' @param g Index of the gene.
-#' @param alpha_mu_2 Fixed parameter to control variation of mean expressions.
-#' @param quadratic Relationship between mean expressions and dispersion on the log-scale. Default setting is to assume quadratic is FALSE.
-#' @return probability density of mean expressions and dispersions for component j and gene g on the log-scale.
-#' @export
 unique_parameters_log_prob <- function(mu_star,
                                        phi_star,
                                        Z,
@@ -553,25 +509,6 @@ unique_parameters_log_prob <- function(mu_star,
 }
 
 
-#' Simulation of mean expressions and dispersions
-#'
-#' @param mu_star_1_J Mean expression matrix.
-#' @param phi_star_1_J Dispersion matrix.
-#' @param Z Allocations.
-#' @param b Relationship between mean expressions and dispersions.
-#' @param alpha_phi_2 Variance for dispersion given mean expressions.
-#' @param Y Dataset.
-#' @param Beta Capture efficiency.
-#' @param alpha_mu_2 Fixed parameter to control variation of mean expressions.
-#' @param mean_X_mu_phi Mean of mean expressions and dispersion.
-#' @param tilde_s_mu_phi sum of cross products of mean expressions and dispersions.
-#' @param covariance Variance-covariance for mean expressions and dispersions.
-#' @param quadratic Relationship between mean expressions and dispersion on the log-scale. Default setting is to assume quadratic is FALSE.
-#' @param iter_num Current iteration.
-#' @param adaptive_prop Extra variation.
-#' @return A list of 5 items: new mean expression matrix; new dispersion matrix; total number of accepted values; update tilde_s, mean and
-#' covariance structure of mean expressions and dispersion.
-#' @export
 unique_parameters_mcmc <- function(mu_star_1_J,
                                    phi_star_1_J,
                                    mean_X_mu_phi,
@@ -585,11 +522,25 @@ unique_parameters_mcmc <- function(mu_star_1_J,
                                    iter_num,
                                    quadratic=FALSE,
                                    Y,
-                                   adaptive_prop = 0.01){
+                                   adaptive_prop = 0.01,
+                                   num.cores = 1,
+                                   J = NULL,
+                                   G = NULL,
+                                   run.on.pc = TRUE){
 
   # dimensions
-  J <- nrow(mu_star_1_J)
-  G <- ncol(mu_star_1_J)
+  if(is.null(J)){
+
+    J <- nrow(mu_star_1_J)
+  }
+
+  if(is.null(G)){
+
+    G <- ncol(mu_star_1_J)
+  }
+
+
+
   n <- iter_num
 
   # previous values
@@ -607,54 +558,87 @@ unique_parameters_mcmc <- function(mu_star_1_J,
 
   accept_count_tot <- 0
 
-  for(j in 1:J){
-
-    loop.result <- foreach(g = 1:G,
-                           .packages = c('mvtnorm'),
-                           .export = c('unique_parameters_log_prob')) %dopar% {
-
-      mu_star_old <- mu_star_1_J[j,g]
-      phi_star_old <- phi_star_1_J[j,g]
-      X_mu_phi_star_old <- log(c(mu_star_old, phi_star_old))
-
-      # Simulate new value of X, based on the previous value and covariance structure
-      if(any(unlist(Z)==j)){
-
-        # Cluster j is occupied
-        if(n <= 100){
-          X_mu_phi_star_new <- rmvnorm(n = 1,
-                                       mean = X_mu_phi_star_old,
-                                       sigma = diag(1,nrow = 2, ncol = 2))
-        }else{
-          X_mu_phi_star_new <- rmvnorm(n = 1,
-                                       mean = X_mu_phi_star_old,
-                                       sigma = (2.4^2)/2*(covariance_old[[j]][[g]] + adaptive_prop*diag(1,nrow = 2, ncol = 2)))
-        }
-      }else{
-
-        # Cluster j is non-occupied
-        mu_star_new <- rlnorm(n = 1,
-                              meanlog = 0,
-                              sdlog = sqrt(alpha_mu_2))
-
-        phi_star_new <- rlnorm(n = 1,
-                               meanlog = b[1] + b[2]*log(mu_star_new),
-                               sdlog = sqrt(alpha_phi_2))
-
-        X_mu_phi_star_new <- log(c(mu_star_new, phi_star_new))
-      }
+  jg_comb <- expand.grid(1:J,
+                         1:G)
 
 
-      # Convert back to mu_new and phi_new and based on these values
-      # to compute the acceptance probability
-      mu_star_new <- exp(X_mu_phi_star_new[1])
-      phi_star_new <- exp(X_mu_phi_star_new[2])
 
-      if(any(unlist(Z)==j)){
+  # Register Cores
+  if(run.on.pc == FALSE){
 
-        # Compute log acceptance probability for occupied cluster
-        acceptance_prob_log <- unique_parameters_log_prob(mu_star = mu_star_new,
-                                                          phi_star = phi_star_new,
+    cl <- makeCluster(num.cores,
+                      type = "FORK")
+
+  }else{
+
+    cl <- makeCluster(num.cores)
+  }
+
+
+  registerDoParallel(cl)
+
+
+  loop.result <- foreach(i = 1:(J*G),
+
+                         .packages = c('mvtnorm',
+                                       'stats'),
+
+                         .export = c('unique_parameters_log_prob')) %dopar% {
+
+                           j <- jg_comb[i,1]
+                           g <- jg_comb[i,2]
+
+                           mu_star_old <- mu_star_1_J[j,g]
+                           phi_star_old <- phi_star_1_J[j,g]
+                           X_mu_phi_star_old <- log(c(mu_star_old, phi_star_old))
+
+                           if(any(unlist(Z)==j)){
+
+                             if(n <= 100){
+                               X_mu_phi_star_new <- rmvnorm(n = 1,
+                                                            mean = X_mu_phi_star_old,
+                                                            sigma = diag(1,nrow = 2, ncol = 2))
+                             }else{
+                               X_mu_phi_star_new <- rmvnorm(n = 1,
+                                                            mean = X_mu_phi_star_old,
+                                                            sigma = (2.4^2)/2*(covariance_old[[j]][[g]] +
+                                                                                 adaptive_prop*diag(1,nrow = 2, ncol = 2)))
+                             }
+                           }else{
+
+                             mu_star_new <- rlnorm(n = 1,
+                                                   meanlog = 0,
+                                                   sdlog = sqrt(alpha_mu_2))
+
+                             phi_star_new <- rlnorm(n = 1,
+                                                    meanlog = b[1] + b[2]*log(mu_star_new),
+                                                    sdlog = sqrt(alpha_phi_2))
+
+                             X_mu_phi_star_new <- log(c(mu_star_new, phi_star_new))
+                           }
+
+                           X_mu_phi_star_new <- as.vector(X_mu_phi_star_new)
+
+                           mu_star_new <- exp(X_mu_phi_star_new[1])
+                           phi_star_new <- exp(X_mu_phi_star_new[2])
+
+
+                           if(any(unlist(Z)==j)){
+
+                             acceptance_prob_log <- unique_parameters_log_prob(mu_star = mu_star_new,
+                                                                               phi_star = phi_star_new,
+                                                                               Z = Z,
+                                                                               b = b,
+                                                                               alpha_phi_2 = alpha_phi_2,
+                                                                               Y = Y,
+                                                                               Beta = Beta,
+                                                                               j = j,
+                                                                               g = g,
+                                                                               alpha_mu_2 = alpha_mu_2,
+                                                                               quadratic = quadratic) -
+
+                               unique_parameters_log_prob(mu_star = mu_star_old,
+                                                          phi_star = phi_star_old,
                                                           Z = Z,
                                                           b = b,
                                                           alpha_phi_2 = alpha_phi_2,
@@ -665,69 +649,67 @@ unique_parameters_mcmc <- function(mu_star_1_J,
                                                           alpha_mu_2 = alpha_mu_2,
                                                           quadratic = quadratic) -
 
-          unique_parameters_log_prob(mu_star = mu_star_old,
-                                     phi_star = phi_star_old,
-                                     Z = Z,
-                                     b = b,
-                                     alpha_phi_2 = alpha_phi_2,
-                                     Y = Y,
-                                     Beta = Beta,
-                                     j = j,
-                                     g = g,
-                                     alpha_mu_2 = alpha_mu_2,
-                                     quadratic = quadratic) -
+                               log(mu_star_old) -log(phi_star_old) + log(mu_star_new) + log(phi_star_new)
 
-          log(mu_star_old) -log(phi_star_old) + log(mu_star_new) + log(phi_star_new)
+                             outcome <- rbinom(n = 1,
+                                               size = 1,
+                                               prob = min(1,exp(acceptance_prob_log)))
 
-        outcome <- rbinom(n = 1,
-                          size = 1,
-                          prob = min(1,exp(acceptance_prob_log)))
+                           }else{
 
-      }else{
+                             outcome <- 1
+                           }
 
-        # For non occupied cluster, we simulate from the prior, hence always accept
-        outcome <- 1
-      }
+                           if(is.na(outcome) == TRUE | outcome == 0 | log(mu_star_new) > 10){
+                             X_mu_phi_star_new <- X_mu_phi_star_old
+                             mu_star_new <- mu_star_old
+                             phi_star_new <- phi_star_old
+                             accept_count <- 0
+
+                           }else{
+
+                             accept_count <- 1
+                           }
+
+                           list('mu_star_new' = mu_star_new,
+                                'phi_star_new' = phi_star_new,
+                                'X_mu_phi_star_new' = X_mu_phi_star_new,
+                                'accept_count' = accept_count)
+
+                         }
 
 
-      # Acceptance
-      if(is.na(outcome) == TRUE | outcome == 0 | log(mu_star_new) > 10){
-        X_mu_phi_star_new <- X_mu_phi_star_old
-        mu_star_new <- mu_star_old
-        phi_star_new <- phi_star_old
-        accept_count <- 0
-      }else{
-        accept_count <- 1
-      }
+  stopCluster(cl)
 
-      ## Return outputs
-      list('mu_star_new' = mu_star_new,
-           'phi_star_new' = phi_star_new,
-           'X_mu_phi_star_new' = X_mu_phi_star_new,
-           'accept_count' = accept_count)
-    }
+  for(i in 1:(J*G)){
 
-    ##-- Redistribute outcome from loop.result
+    j <- jg_comb[i,1]
+    g <- jg_comb[i,2]
 
-    for(g in 1:G){
+    # Input values into the matrix
+    mu_star_1_J_new[j,g] <- loop.result[[i]]$mu_star_new
+    phi_star_1_J_new[j,g] <- loop.result[[i]]$phi_star_new
 
-      mu_star_1_J_new[j,g] <- loop.result[[g]]$mu_star_new
-      phi_star_1_J_new[j,g] <- loop.result[[g]]$phi_star_new
 
-      X_mu_phi_star_new <- loop.result[[g]]$X_mu_phi_star_new
+    X_mu_phi_star_new <- loop.result[[i]]$X_mu_phi_star_new
 
-      tilde_s_mu_phi_new_j_g <- tilde_s_mu_phi_old[[j]][[g]] + matrix(X_mu_phi_star_new,ncol=1) %*%
-        matrix(X_mu_phi_star_new,nrow=1)
-      mean_X_mu_phi_new_j_g <- mean_X_mu_phi_old[[j]][[g]]*(1-1/n) + 1/n*matrix(X_mu_phi_star_new,nrow=1)
-      covariance_new_j_g <- 1/(n-1)*tilde_s_mu_phi_new_j_g - n/(n-1)*t(mean_X_mu_phi_new_j_g)%*%mean_X_mu_phi_new_j_g
+    # Some statistics
+    tilde_s_mu_phi_new_j_g <- tilde_s_mu_phi_old[[j]][[g]] + matrix(X_mu_phi_star_new,
+                                                                    ncol=1) %*%
+      matrix(X_mu_phi_star_new,
+             nrow=1)
 
-      covariance_new[[j]][[g]] <- covariance_new_j_g
-      tilde_s_mu_phi_new[[j]][[g]] <- tilde_s_mu_phi_new_j_g
-      mean_X_mu_phi_new[[j]][[g]] <- mean_X_mu_phi_new_j_g
+    mean_X_mu_phi_new_j_g <- mean_X_mu_phi_old[[j]][[g]]*(1-1/n) + 1/n*matrix(X_mu_phi_star_new,
+                                                                              nrow=1)
 
-      ## Count the total number of accepted simulation
-      accept_count_tot <- accept_count_tot + loop.result[[g]]$accept_count
-    }
+    covariance_new_j_g <- 1/(n-1)*tilde_s_mu_phi_new_j_g - n/(n-1)*t(mean_X_mu_phi_new_j_g)%*%mean_X_mu_phi_new_j_g
+
+
+    covariance_new[[j]][[g]] <- covariance_new_j_g
+    tilde_s_mu_phi_new[[j]][[g]] <- tilde_s_mu_phi_new_j_g
+    mean_X_mu_phi_new[[j]][[g]] <- mean_X_mu_phi_new_j_g
+
+    accept_count_tot <- accept_count_tot + loop.result[[i]]$accept_count
   }
 
   # Outputs
@@ -740,18 +722,6 @@ unique_parameters_mcmc <- function(mu_star_1_J,
 }
 
 
-#' Posterior density of capture efficiency
-#'
-#' @param Beta_d Capture efficiency of cells in dataset d.
-#' @param Y Dataset.
-#' @param Z Allocations.
-#' @param mu_star_1_J Mean expression matrix.
-#' @param phi_star_1_J Dispersion matrix.
-#' @param d The index of the dataset.
-#' @param a_d_beta Fixed shape parameter 1 of the prior for capture efficiency.
-#' @param b_d_beta Fixed shape parameter 1 of the prior for capture efficiency.
-#' @return Posterior density of capture efficiency for cells in dataset d on the log-scale.
-#' @export
 capture_efficiencies_log_prob <- function(Beta_d,
                                           Y,
                                           Z,
@@ -770,34 +740,16 @@ capture_efficiencies_log_prob <- function(Beta_d,
   # mu x beta
   mu_star_beta <- apply(mu_star_1_J[j,], 2, function(x) x*Beta_d)
 
-  # Y x beta
-  Y_beta <- apply(t(Y[[d]]), 2, function(x) x*Beta_d)
+  # Y x log(beta)
+  Y_log_beta <- apply(t(Y[[d]]), 2, function(x) x*log(Beta_d))
 
-  lprod2 <- rowSums((phi_star_1_J[j,]+t(Y[[d]]))*log(phi_star_1_J[j,] + mu_star_beta) - Y_beta)
+  lprod2 <- rowSums((phi_star_1_J[j,]+t(Y[[d]]))*log(phi_star_1_J[j,] + mu_star_beta) - Y_log_beta)
   lprod <- lprod1 - lprod2
 
   # output
   return(lprod)
 }
 
-
-#' Simulation of capture efficiency
-#'
-#' @param Beta Capture efficiency.
-#' @param Y Dataset.
-#' @param Z Allocations.
-#' @param mu_star_1_J Mean expression matrix.
-#' @param phi_star_1_J Dispersion matrix.
-#' @param d The index of the dataset.
-#' @param a_d_beta Fixed shape parameter 1 of the prior for capture efficiency.
-#' @param b_d_beta Fixed shape parameter 1 of the prior for capture efficiency.
-#' @param iter_num The iteration of the current run.
-#' @param M_2 Sum of square differences between observation and mean for each cell.
-#' @param mean_X Mean of capture efficiency of all cells.
-#' @param variance Variance of capture efficiency of all cells.
-#' @param adpative_prop Extra variation.
-#' @return A list of 5 items: The new simulated capture effiency; total number of accpeted simulations; updated mean, M_2 and variance.
-#' @export
 capture_efficiencies_mcmc <- function(Beta,
                                       Y,
                                       Z,
@@ -836,14 +788,16 @@ capture_efficiencies_mcmc <- function(Beta,
     X_d_old <- log(Beta_d_old/(1-Beta_d_old))
 
     # Simulate X_d_new
-    if(n <= 100){
+    if(n <= 20){
+
       X_d_new <- rnorm(n = length(X_d_old),
-                     mean = X_d_old,
-                     sd = 1)
+                       mean = X_d_old,
+                       sd = 1)
     }else{
+
       X_d_new <- rnorm(n = length(X_d_old),
-                     mean = X_d_old,
-                     sd = sqrt(2.4^2*(variance_old[[d]] + adaptive_prop)))
+                       mean = X_d_old,
+                       sd = sqrt(2.4^2*(variance_old[[d]] + adaptive_prop)))
     }
 
     Beta_d_new <- exp(X_d_new)/(1+exp(X_d_new))
@@ -870,10 +824,12 @@ capture_efficiencies_mcmc <- function(Beta,
 
       log(Beta_d_new) + log(1-Beta_d_new) - log(Beta_d_old) - log(1-Beta_d_old)
 
-    # random bernoulli
-    outcome <- rbinom(n = C[d],
-                      size = 1,
-                      prob = min(1, exp(acceptance_prob_log)))
+    # Sampling
+    outcome <- sapply(1:C[d],
+                      function(c) rbinom(n = 1,
+                                         size = 1,
+                                         prob = min(1, exp(acceptance_prob_log[c]))))
+
 
     accept.num <- 0
 

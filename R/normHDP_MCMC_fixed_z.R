@@ -1,21 +1,24 @@
 
-normHDP_mcmc <- function(Y,
-                         J,
-                         number_iter,
-                         thinning = 5,
-                         empirical = TRUE,
-                         burn_in = 3000,
-                         quadratic = FALSE,
-                         iter_update = 100,
-                         beta.mean = 0.06,
-                         alpha_mu_2 = NULL,
-                         adaptive_prop = 0.1,
-                         BB_SIZE = TRUE,
-                         print_Z = FALSE,
-                         num.cores = 4,
-                         save.only.z = FALSE,
-                         baynorm.beta = NULL,
-                         run.on.pc = TRUE){
+
+normHDP_mcmc_fixed_z <- function(Y,
+                                 Z,
+                                 number_iter,
+                                 thinning = 5,
+                                 empirical = TRUE,
+                                 burn_in = 3000,
+                                 quadratic = FALSE,
+                                 iter_update = 100,
+                                 beta.mean = 0.06,
+                                 alpha_mu_2 = NULL,
+                                 adaptive_prop = 0.1,
+                                 BB_SIZE = TRUE,
+                                 num.cores = 4,
+                                 baynorm.beta = NULL,
+                                 auto.save = FALSE,
+                                 auto.save.every.n = 0,
+                                 auto.save.name = NULL,
+                                 run.on.pc = TRUE){
+
 
   ##--------------- dimensions --------------------
 
@@ -24,6 +27,9 @@ normHDP_mcmc <- function(Y,
   C <- unlist(lapply(1:D, function(d) ncol(Y[[d]])))
   Y <- sapply(1:D,
               function(d) as.matrix(Y[[d]]))
+
+  # Set Z to the total number of clusters
+  J <- max(unlist(Z))
 
   ##--------------- bayNorm estimates -------------
 
@@ -35,8 +41,8 @@ normHDP_mcmc <- function(Y,
       bayNorm::BetaFun(Data = Y[[d]],
                        MeanBETA = beta.mean)$BETA
     })
-
   }
+
 
   # Apply bayNorm to individual datasets
   baynorm_ind <- lapply(1:D, function(d){
@@ -69,7 +75,6 @@ normHDP_mcmc <- function(Y,
 
   b_output <- NULL
   alpha_phi_2_output <- 0
-  Z_output <- NULL
   P_J_D_output <- NULL
   P_output <- NULL
   alpha_output <- 0
@@ -88,8 +93,6 @@ normHDP_mcmc <- function(Y,
     b_initial <- c(0,1)
   }
 
-  ## Random allocation
-  Z_initial <- lapply(1:D, function(d) sample(1:J, size = C[d], replace = TRUE))
 
   P_J_D_initial <- matrix(1/J, nrow = J, ncol = D)
   P_initial <- rep(1/J, J)
@@ -196,7 +199,6 @@ normHDP_mcmc <- function(Y,
   #----------------------- Step 2: Set the initial_values as new values ----------------------------
   b_new <- b_initial
   alpha_phi_2_new <- alpha_phi_2_initial
-  Z_new <- Z_initial
   P_J_D_new <- P_J_D_initial
   P_new <- P_initial
   alpha_new <- alpha_initial
@@ -239,7 +241,7 @@ normHDP_mcmc <- function(Y,
     tilde_s_unique_new[[j]] <- lapply(1:G, function(g){
       matrix(c(log(mu_star_1_J_new[j,g]),log(phi_star_1_J_new[j,g])),ncol=1)%*%
         matrix(c(log(mu_star_1_J_new[j,g]),log(phi_star_1_J_new[j,g])),nrow=1)}
-      )
+    )
 
     mean_X_unique_new[[j]] <- lapply(1:G, function(g){
       matrix(c(log(mu_star_1_J_new[j,g]),log(phi_star_1_J_new[j,g])),nrow=1)
@@ -285,31 +287,24 @@ normHDP_mcmc <- function(Y,
     alpha_phi_2_new <- mean_dispersion_output$alpha_phi_2
     b_new <- mean_dispersion_output$b
 
-    ##----------------------------------- Allocation variables ------------------------------------
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
 
-    allocation_output <- allocation_variables_mcmc(P_J_D = P_J_D_new,
-                                                   mu_star_1_J = mu_star_1_J_new,
-                                                   phi_star_1_J = phi_star_1_J_new,
-                                                   Y = Y,
-                                                   Beta = Beta_new,
-                                                   iter_num = iter,
-                                                   num.cores = num.cores,
-                                                   run.on.pc = run.on.pc)
-
-    Z_new <- allocation_output$Z
-
-    ##-- If print_Z is TRUE, we print out a summary table of allocations for every iteration
-    if(isTRUE(print_Z)){
-      for(d in 1:D) print(table(Z_new[[d]]))
+      regression_detail <- list('alpha_phi_2_new' = alpha_phi_2_new,
+                                'b_new' = b_new)
     }
 
     ##------------------------ Dataset specific component probabilities ------------------------------
 
-    dataset_specfic_output <- dataset_specific_mcmc(Z = Z_new,
+    dataset_specfic_output <- dataset_specific_mcmc(Z = Z,
                                                     P = P_new,
                                                     alpha = alpha_new)
 
     P_J_D_new <- dataset_specfic_output
+
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+      P_J_D_details <- list('P_J_D_new' = P_J_D_new)
+    }
 
     ##------------------------ Component probabilities -----------------------------------------------
 
@@ -330,6 +325,16 @@ normHDP_mcmc <- function(Y,
     P_count <- P_count + component_output$accept
     acceptance_prob_list$P_accept[iter-1] <- P_count/(iter-1)
 
+
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+      component_details <- list('P_new' = P_new,
+                                'tilde_s_component_new' = tilde_s_component_new,
+                                'mean_X_component_new' = mean_X_component_new,
+                                'covariance_component_new' = covariance_component_new,
+                                'P_count' = P_count)
+    }
+
     ##-------------------------- Update alpha ----------------------------------
 
     alpha_output_sim <- alpha_mcmc(P_J_D = P_J_D_new,
@@ -348,6 +353,16 @@ normHDP_mcmc <- function(Y,
     alpha_count <- alpha_count + alpha_output_sim$accept
     acceptance_prob_list$alpha_accept[iter-1] <- alpha_count/(iter-1)
 
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+      alpha_details <- list('alpha_new' = alpha_new,
+                            'mean_X_alpha_new' = mean_X_alpha_new,
+                            'M_2_alpha_new' = M_2_alpha_new,
+                            'variance_alpha_new' = variance_alpha_new,
+                            'alpha_count' = alpha_count)
+
+    }
+
     ##----------------------- Update alpha_zero --------------------------------
 
     alpha_zero_output_sim <- alpha_zero_mcmc(P = P_new,
@@ -365,13 +380,26 @@ normHDP_mcmc <- function(Y,
     alpha_zero_count <- alpha_zero_count + alpha_zero_output_sim$accept
     acceptance_prob_list$alpha_zero_accept[iter-1] <- alpha_zero_count/(iter-1)
 
+
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+      alpha_zero_details <- list('alpha_zero_new' = alpha_zero_new,
+                                 'mean_X_alpha_zero_new' = mean_X_alpha_zero_new,
+                                 'M_2_alpha_zero_new' = M_2_alpha_zero_new,
+                                 'variance_alpha_zero_new' = variance_alpha_zero_new,
+                                 'alpha_zero_count' = alpha_zero_count)
+
+
+    }
+
+
     ##---------------------- Unique parameters ----------------------------------
 
     unique_output_sim <- unique_parameters_mcmc(mu_star_1_J = mu_star_1_J_new,
                                                 phi_star_1_J = phi_star_1_J_new,
                                                 mean_X_mu_phi = mean_X_unique_new,
                                                 tilde_s_mu_phi = tilde_s_unique_new,
-                                                Z = Z_new,
+                                                Z = Z,
                                                 b = b_new,
                                                 alpha_phi_2 = alpha_phi_2_new,
                                                 Beta = Beta_new,
@@ -393,11 +421,24 @@ normHDP_mcmc <- function(Y,
     acceptance_prob_list$unique_accept[iter-1] <- unique_count/((iter-1)*J*G)
 
 
-    ##-------------------- Capture efficiencies ----------------------------------
+
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+      mu_phi_details <- list('mu_star_1_J_new' = mu_star_1_J_new,
+                             'phi_star_1_J_new' = phi_star_1_J_new,
+                             'tilde_s_unique_new' = tilde_s_unique_new,
+                             'mean_X_unique_new' = mean_X_unique_new,
+                             'covariance_unique_new' = covariance_unique_new,
+                             'unique_count' = unique_count)
+
+
+    }
+
+    ##-------------------- Capture efficiency ----------------------------------
 
     capture_output_sim <- capture_efficiencies_mcmc(Beta = Beta_new,
                                                     Y = Y,
-                                                    Z = Z_new,
+                                                    Z = Z,
                                                     mu_star_1_J = mu_star_1_J_new,
                                                     phi_star_1_J = phi_star_1_J_new,
                                                     a_d_beta = a_d_beta,
@@ -415,12 +456,23 @@ normHDP_mcmc <- function(Y,
     Beta_count <- Beta_count + capture_output_sim$accept_count
     acceptance_prob_list$Beta_accept[iter-1] <- Beta_count/((iter-1)*(sum(C)))
 
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+      beta_details <- list('Beta_new' = Beta_new,
+                           'mean_X_capture_new' = mean_X_capture_new,
+                           'M_2_capture_new' = M_2_capture_new,
+                           'variance_capture_new' = variance_capture_new,
+                           'Beta_count' = Beta_count)
+
+
+
+    }
+
     #-------------------------- Step 5: Update simulated values ------------------------
 
     if(update == TRUE){
       alpha_phi_2_output[output_index] <- alpha_phi_2_new
       b_output[[output_index]] <- as.vector(b_new)
-      Z_output[[output_index]] <- Z_new
       P_J_D_output[[output_index]] <- P_J_D_new
       P_output[[output_index]] <- P_new
       alpha_output[output_index] <- alpha_new
@@ -430,31 +482,60 @@ normHDP_mcmc <- function(Y,
       Beta_output[[output_index]] <- Beta_new
     }
 
+
+    if(isTRUE(auto.save) & (iter %% auto.save.every.n == 0)){
+
+
+      my_list <- list('b_output' = b_output,
+                      'alpha_phi2_output' = alpha_phi_2_output,
+                      'P_J_D_output' = P_J_D_output,
+                      'P_output' = P_output,
+                      'alpha_output' = alpha_output,
+                      'alpha_zero_output' = alpha_zero_output,
+                      'mu_star_1_J_output' = mu_star_1_J_output,
+                      'phi_star_1_J_output' = phi_star_1_J_output,
+                      'Beta_output' = Beta_output,
+                      'acceptance_prob_list' = acceptance_prob_list,
+
+                      'J' = J,
+                      'D' = D,
+                      'C' = C,
+                      'G' = G,
+                      'Z' = Z,
+
+                      'regression_detail' = regression_detail,
+                      'P_J_D_details' = P_J_D_details,
+                      'component_details' = component_details,
+                      'alpha_details' = alpha_details,
+                      'alpha_zero_details' = alpha_zero_details,
+                      'mu_phi_details' = mu_phi_details,
+                      'beta_details' = beta_details)
+
+      save(my_list, file = paste0(auto.save.name, '.RData'))
+
+
+    }
+
+
   }
 
   ## Return the list
-  if(save.only.z == TRUE){
+  my_list <- list('b_output' = b_output,
+                  'alpha_phi2_output' = alpha_phi_2_output,
+                  'P_J_D_output' = P_J_D_output,
+                  'P_output' = P_output,
+                  'alpha_output' = alpha_output,
+                  'alpha_zero_output' = alpha_zero_output,
+                  'mu_star_1_J_output' = mu_star_1_J_output,
+                  'phi_star_1_J_output' = phi_star_1_J_output,
+                  'Beta_output' = Beta_output,
+                  'acceptance_prob_list' = acceptance_prob_list,
 
-    my_list <- Z_output
-
-  }else{
-
-    my_list <- list('b_output' = b_output,
-                    'alpha_phi2_output' = alpha_phi_2_output,
-                    'Z_output' = Z_output,
-                    'P_J_D_output' = P_J_D_output,
-                    'P_output' = P_output,
-                    'alpha_output' = alpha_output,
-                    'alpha_zero_output' = alpha_zero_output,
-                    'mu_star_1_J_output' = mu_star_1_J_output,
-                    'phi_star_1_J_output' = phi_star_1_J_output,
-                    'Beta_output' = Beta_output,
-                    'acceptance_prob_list' = acceptance_prob_list,
-
-                    'D' = D,
-                    'C' = C,
-                    'G' = G)
-  }
+                  'J' = J,
+                  'D' = D,
+                  'C' = C,
+                  'G' = G,
+                  'Z' = Z)
 
 
   return(my_list)
