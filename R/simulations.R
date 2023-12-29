@@ -1,0 +1,178 @@
+#--------------------------------------- Simulation 1 ----------------------------------------
+
+set.seed(2)
+
+C <- c(50, 100)
+G <- 50
+D <- 2
+J <- 3
+
+a_beta <- 1
+b_beta <- 0.5
+
+b <- c(0,3)
+alpha_mu2 <- 1
+alpha_phi2 <- 1
+
+p_jd <- matrix(0, nrow = J, ncol = D)
+p_jd[,1] <- c(0.6,0.4,0)
+p_jd[,2] <- c(0.4,0,0.6)
+
+
+
+
+sim1_beta <- lapply(1:D,
+                    function(d) rbeta(n = C[d], shape1 = a_beta, shape2 = b_beta))
+
+sim1_mu <- matrix(rlnorm(n = J*G,
+                         meanlog = 0,
+                         sdlog = sqrt(alpha_mu2)),
+
+                  nrow = J,
+                  ncol = G)
+
+sim1_phi <- matrix(rlnorm(n = J*G,
+                          meanlog = b[1] + b[2]*log(as.vector(sim1_mu)),
+                          sdlog = sqrt(alpha_phi2)),
+
+                   nrow = J,
+                   ncol = G)
+
+sim1_z <- lapply(1:D,
+                 function(d) rcat(n = C[d],
+                                  prob = p_jd[,d]))
+
+sim_data1 <- lapply(1:D,
+                    function(d) matrix(rnbinom(n = C[d]*G,
+                                               mu = rep(sim1_beta[[d]], each = G)*as.vector(t(sim1_mu[sim1_z[[d]],])),
+                                               size = as.vector(t(sim1_phi[sim1_z[[d]],]))),
+
+                                       nrow = G,
+                                       ncol = C[d])
+
+)
+
+
+
+
+
+
+
+
+
+
+
+
+#------------------------------------------ Simulation 2 ---------------------------------------------------
+
+
+sim2_beta <- sim1_beta
+sim2_Z <- sim1_z
+sim2_mu <- sim1_mu
+
+sim2_phi <- matrix(rlnorm(n = J*G,
+                          meanlog = 4 - 2/as.vector(sim2_mu),
+                          sdlog = sqrt(alpha_phi2)),
+
+                   nrow = J,
+                   ncol = G)
+
+sim_data2 <- lapply(1:D,
+                    function(d) matrix(rnbinom(n = C[d]*G,
+                                               mu = rep(sim2_beta[[d]], each = G)*as.vector(t(sim2_mu[sim2_Z[[d]],])),
+                                               size = as.vector(t(sim2_phi[sim2_Z[[d]],]))),
+
+                                       nrow = G,
+                                       ncol = C[d])
+
+)
+
+
+
+
+
+
+
+
+
+
+
+#--------------------------------------- Simulation 3 ------------------------------------------
+
+D <- 2
+G <- 150
+C <- c(300,400)
+a_beta <- 1
+b_beta <- 0.5
+
+
+p_jd <- matrix(0, nrow = J, ncol = D)
+p_jd[,1] <- c(0.8,0.2,0)
+p_jd[,2] <- c(0.8,0,0.2)
+
+b <- c(-1, 1)
+
+
+sim3_beta <- lapply(1:D,
+                    function(d) rbeta(n = C[d], shape1 = a_beta, shape2 = b_beta))
+
+
+sim3_Z <- lapply(1:D,
+                 function(d) rcat(n = C[d],
+                                  prob = p_jd[,d]))
+
+
+sim3_mu <- matrix(0, nrow = J, ncol = G)
+sim3_phi <- matrix(0, nrow = J, ncol = G)
+
+# Non-marker genes
+sim3_mu_nonmarker <- rlnorm(n = 150-106+1,
+                            meanlog = 3.5,
+                            sdlog = 0.5)
+
+sim3_mu[,106:150] <- matrix(rep(sim3_mu_nonmarker,
+                                each = J),
+
+                            ncol = 150-106+1)
+
+# Marker genes
+sim3_mu[1,1:105] <- rlnorm(n = 105,
+                           meanlog = -3,
+                           sdlog = 0.1)
+
+
+sim3_mu[2,1:105] <- rlnorm(n = 105,
+                           meanlog = 5,
+                           sdlog = 0.1)
+
+
+sim3_mu[3,1:105] <- rlnorm(n = 105,
+                           meanlog = 8,
+                           sdlog = 0.1)
+
+sim3_phi_nonmarker <- rlnorm(n = 150-106+1,
+                             meanlog = log(sim3_mu_nonmarker),
+                             sdlog = 0.1)
+
+sim3_phi[,106:150] <- matrix(rep(sim3_phi_nonmarker,
+                                 each = J),
+
+                             ncol = 150-106+1)
+
+sim3_phi[,1:105] <- matrix(rlnorm(n = 105*J,
+                                  meanlog = b[1] + b[2]*log(as.vector(sim3_mu[,1:105])),
+                                  sdlog = 0.1),
+
+                           nrow = J,
+                           ncol = 105)
+
+
+sim_data3 <- lapply(1:D,
+                    function(d) matrix(rnbinom(n = C[d]*G,
+                                               mu = rep(sim3_beta[[d]], each = G)*as.vector(t(sim3_mu[sim3_Z[[d]],])),
+                                               size = as.vector(t(sim3_phi[sim3_Z[[d]],]))),
+
+                                       nrow = G,
+                                       ncol = C[d])
+
+)
