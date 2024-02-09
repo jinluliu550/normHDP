@@ -32,7 +32,7 @@ Z_trace_all <- lapply(1:Width,
 #------------------------------------------------ General analysis ------------------------------------------
 
 # Function below computes the optimized clustering estimate
-Z_opt <- concensus_clustering(Z_output = Z_trace_all,
+Z_opt <- consensus_clustering(Z_output = Z_trace_all,
                               num.cores = 4,
                               run.on.pc = TRUE)
 
