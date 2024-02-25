@@ -24,7 +24,7 @@ ppc_multiple <- function(normHDP_post_output,
   # Generate some random index of length number_rep
   index <- sample(1:length(mu_star_1_J_output),
                   number_rep,
-                  replace = FALSE)
+                  replace = TRUE)
 
   ##----------------------- Compute discrepancy measures ----------------------------------
 
@@ -58,14 +58,14 @@ ppc_multiple <- function(normHDP_post_output,
 
                                    phi <- matrix(rlnorm(n = J*G,
                                                         meanlog = theta$b[1]+theta$b[2]*log(theta$mu)+theta$b[3]*log(theta$mu)^2,
-                                                        sdlog = theta$alpha_phi_2),
+                                                        sdlog = sqrt(theta$alpha_phi_2)),
                                                  nrow = J,
                                                  ncol = G)
                                  }else{
 
                                    phi <- matrix(rlnorm(n = J*G,
                                                         meanlog = theta$b[1]+theta$b[2]*log(theta$mu),
-                                                        sdlog = theta$alpha_phi_2),
+                                                        sdlog = sqrt(theta$alpha_phi_2)),
                                                  nrow = J,
                                                  ncol = G)
                                  }
