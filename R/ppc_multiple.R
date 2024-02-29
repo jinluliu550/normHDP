@@ -24,7 +24,7 @@ ppc_multiple <- function(normHDP_post_output,
   # Generate some random index of length number_rep
   index <- sample(1:length(mu_star_1_J_output),
                   number_rep,
-                  replace = TRUE)
+                  replace = FALSE)
 
   ##----------------------- Compute discrepancy measures ----------------------------------
 
@@ -50,7 +50,7 @@ ppc_multiple <- function(normHDP_post_output,
                                  # Set theta
                                  theta <- list('mu' = mu_star_1_J_output[[t]],
                                                'b' = b_output[[t]],
-                                               'alpha_phi_2' = alpha_phi_2_output,
+                                               'alpha_phi_2' = alpha_phi_2_output[t],
                                                'Beta' = Beta_output[[t]])
 
                                  # Simulate phi
@@ -141,6 +141,7 @@ ppc_multiple <- function(normHDP_post_output,
 }
 
 
+
 # Function 2: Compare statistics of the observed data against replicated data
 ppc_multiple_plot <- function(ppc_multiple_df,
                               title){
@@ -150,61 +151,80 @@ ppc_multiple_plot <- function(ppc_multiple_df,
   rep_Y_statistics <- ppc_multiple_df$rep_Y_statistics
 
 
-  Y_statistics$t <- 'observed data'
-  rep_Y_statistics$t <- paste('replicated data', rep_Y_statistics$t)
+  Y_statistics$source <- 'observed data'
+  rep_Y_statistics$source <- paste('replicated data', rep_Y_statistics$t)
 
 
   # Dimension
   D <- max(Y_statistics$dataset)
 
-  # Kernel density plot
-  df <- rbind(Y_statistics,
-              rep_Y_statistics)
-
-  colnames(df)[7] <- 'source'
 
   for(d in 1:D){
 
-    df_d <- df %>%
+    df_Y <- Y_statistics %>%
+      filter(dataset == d)
+
+    df_Y_rep <- rep_Y_statistics %>%
       filter(dataset == d)
 
     plot1 <- ggplot()+
       geom_density(mapping = aes(x = mean.log.shifted.counts,
                                  colour = source),
 
-                   data = df_d,
+                   data = df_Y_rep,
                    size = 1.2)+
       theme_bw()+
       xlab('mean of log shifted counts')+
-      scale_color_manual(values=c(rep('grey',ppc_multiple_df$number_rep), 'red'))+
+      scale_color_manual(values=rep('grey',ppc_multiple_df$number_rep))+
       theme(legend.position = "none")+
-      ggtitle(title[d])
+      ggtitle(title[d])+
+
+      geom_density(mapping = aes(x = mean.log.shifted.counts,
+                                 colour = source),
+
+                   data = df_Y,
+                   size = 1.2,
+                   colour = 'red')
 
 
     plot2 <- ggplot()+
       geom_density(mapping = aes(x = sd.log.shifted.counts,
                                  colour = source),
 
-                   data = df_d,
+                   data = df_Y_rep,
                    size = 1.2)+
       theme_bw()+
       xlab('standard deviaion of log shifted counts')+
-      scale_color_manual(values=c(rep('grey',ppc_multiple_df$number_rep), 'red'))+
+      scale_color_manual(values=rep('grey',ppc_multiple_df$number_rep))+
       theme(legend.position = "none")+
-      ggtitle(title[d])
+      ggtitle(title[d])+
+
+      geom_density(mapping = aes(x = sd.log.shifted.counts,
+                                 colour = source),
+
+                   data = df_Y,
+                   size = 1.2,
+                   colour = 'red')
 
 
     plot3 <- ggplot()+
       geom_density(mapping = aes(x = dropout.probability,
                                  colour = source),
 
-                   data = df_d,
+                   data = df_Y_rep,
                    size = 1.2)+
       theme_bw()+
       xlab('dropout probabilities')+
-      scale_color_manual(values=c(rep('grey',ppc_multiple_df$number_rep), 'red'))+
+      scale_color_manual(values=rep('grey',ppc_multiple_df$number_rep))+
       theme(legend.position = "none")+
-      ggtitle(title[d])
+      ggtitle(title[d])+
+
+      geom_density(mapping = aes(x = dropout.probability,
+                                 colour = source),
+
+                   data = df_Y,
+                   size = 1.2,
+                   colour = 'red')
 
     ggarrange(plot1, plot2, plot3, nrow = 1)
 

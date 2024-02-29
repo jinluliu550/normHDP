@@ -170,9 +170,9 @@ ppc_single_plot <- function(normHDP_post_output,
     rel.rep.df.d <- filter(rel.rep.df,
                            dataset == d)
 
-    ##-- Plot
-    plot(x = rel.df.d$mean.log.shifted.counts,
-         y = rel.df.d$sd.log.shifted.counts,
+    # Replicated data in black
+    plot(x = rel.rep.df.d$mean.log.shifted.counts,
+         y = rel.rep.df.d$sd.log.shifted.counts,
          xlab = 'Mean of log-shifted counts',
          ylab = 'Standard deviation of log-shifted counts',
          pch = 19,
@@ -181,8 +181,9 @@ ppc_single_plot <- function(normHDP_post_output,
          col = 'black',
          cex.lab = 1.5)
 
-    points(x = rel.rep.df.d$mean.log.shifted.counts,
-           y = rel.rep.df.d$sd.log.shifted.counts,
+    # Observed data in red
+    points(x = rel.df.d$mean.log.shifted.counts,
+           y = rel.df.d$sd.log.shifted.counts,
            pch = 19,
            cex = 0.2,
            col = 'red')
@@ -197,8 +198,9 @@ ppc_single_plot <- function(normHDP_post_output,
     rel.rep.df.d <- filter(rel.rep.df,
                            dataset == d)
 
-    plot(x = rel.df.d$log.mean.counts,
-         y = rel.df.d$dropout.probability,
+    # Replicated data in black
+    plot(x = rel.rep.df.d$log.mean.counts,
+         y = rel.rep.df.d$dropout.probability,
          xlab = 'log of mean gene counts',
          ylab = 'Dropout probabilities',
          pch = 19,
@@ -207,8 +209,9 @@ ppc_single_plot <- function(normHDP_post_output,
          col = 'black',
          cex.lab = 1.5)
 
-    points(x = rel.rep.df.d$log.mean.counts,
-           y = rel.rep.df.d$dropout.probability,
+    # Observed data in red
+    points(x = rel.df.d$log.mean.counts,
+           y = rel.df.d$dropout.probability,
            pch = 19,
            cex = 0.2,
            col = 'red')
