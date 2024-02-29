@@ -1,9 +1,19 @@
-# A full demonstration of how to use the normHDP model
+---
+title: "full_demo"
+author: "Jinlu Liu"
+date: '2024-02-29'
+output: html_document
+---
 
-# Specify width and length: width is the number of chains to run
-# and length is the total number of iterations in each run. We first obtain posterior samples of
-# the allocations (z). Below is an example with 100 chains and 100 iterations in each chain,
-# 30 components and running with 5 cores.
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, eval = FALSE)
+```
+
+## A full demonstration of how to use the normHDP algorithm.
+
+#### First step is to Specify width and length: width is the number of chains to run and length is the total number of iterations in each run. We first obtain posterior samples of the allocations (z). Below is an example with 100 chains and 100 iterations in each chain, 30 components and running with 4 cores.
+
+```{r}
 
 Depth <- 100
 Width <- 100
@@ -24,12 +34,11 @@ Z_trace_all <- lapply(1:Width,
 
                       })
 
+```
 
+#### For some general analysis:
 
-
-
-
-#------------------------------------------------ General analysis ------------------------------------------
+```{r}
 
 # Function below computes the optimized clustering estimate
 Z_opt <- consensus_clustering(Z_output = Z_trace_all,
@@ -67,6 +76,7 @@ plotpsm(psm.ind = Z_opt$psm$psm.within,
 cluster_summary(Z = Z_opt$cluster.estimate,
                 data.name = c('data1',
                               'data2'))
+
 
 # Based on the estimated z, we can obtain samples of all other parameters.
 # The code below uses 10 cores for parallel computing. Need to check the
@@ -112,8 +122,11 @@ mu_and_phi_plot(normHDP_post_output = MCMC_run,
 
 
 
+```
 
-#------------------------------------------- Classification of global markers ---------------------------------------
+#### To find global marker genes, we use the following method:
+
+```{r}
 
 gmg_df <- global_marker_genes(normHDP_post_output = MCMC_run,
                               threshold = list('mu' = 2.5,
@@ -145,17 +158,10 @@ global_marker_genes_heatmap(gmg_output = gmg_df,
                             normHDP_post_output = MCMC_run)
 
 
+```
 
-
-
-
-
-
-
-
-
-
-#--------------------------------------------- Classification of local markers ------------------------------------
+#### To find local marker genes, we use the following method:
+```{r}
 
 lmg_df <- local_marker_genes(normHDP_post_output = MCMC_run,
                              threshold = list('mu' = 0.8,
@@ -183,13 +189,11 @@ local_marker_genes_plot(lmg_output = lmg_df)
 local_marker_genes_heatmap(lmg_output = lmg_df,
                            normHDP_post_output = MCMC_run)
 
+```
 
 
-
-
-
-
-#------------------------------------------- Posterior estimated latent counts ---------------------------------
+#### To visualize estimated latent counts:
+```{r}
 
 latent_counts_Y <- latent_counts(Y = Y,
                                  normHDP_post_output = MCMC_run,
@@ -225,10 +229,10 @@ latent_counts_plot(latent_counts_output = latent_counts_Y,
                    file.name.1 = 'latent_counts_DE',
                    file.name.2 = 'latent_counts_DD')
 
+```
 
-
-
-#---------------------------------------- Heat-map for the observed counts ---------------------------------
+#### To visualize observed counts:
+```{r}
 
 observed_counts_df <- observed_counts(normHDP_post_output = MCMC_run,
                                       Y = Y,
@@ -259,14 +263,11 @@ observed_counts_plot(observed_counts_output = observed_counts_df,
                      file.name.1 = 'DE_reorder.png',
                      file.name.2 = 'DD_reorder.png')
 
+```
 
 
-
-
-
-
-
-#----------------------------------------- t-SNE --------------------------------------------
+#### For some t-SNE plot:
+```{r}
 
 # t-SNE plot using all genes
 tsne_plot(normHDP_post_output = MCMC_run,
@@ -279,15 +280,12 @@ tsne_global_marker_genes(gmg_output = gmg_df,
                          Y_latent = latent_counts_Y$Y_latent,
                          normHDP_post_output = MCMC_run)
 
+```
 
 
+#### For posterior predictive checks:
+```{r}
 
-
-
-
-
-
-#----------------------------------------- Posterior predictive checks -------------------------------------------
 
 # Mixed posterior predictive check: simulate dispersion using all the dependent parameters under log-Normal.
 # Standard posterior predictive check: using posterior draws of dispersions.
@@ -329,17 +327,14 @@ ppp_df_mixed <- ppp_calculation(normHDP_post_output = MCMC_run,
 p_value_plot(ppc_output = ppp_df_standard)
 p_value_plot(ppc_output = ppp_df_mixed)
 
+```
 
 
+#### To focus on visualizing the 'important' genes:
+```{r}
 
-
-
-#----------------------------------------- Important genes ----------------------------------------
-
-# Heat-map of important genes
-
-# Suppose the vector of important genes and the list of genes in Y are given
 heatmap_important_genes(important_genes = important_genes,
                         normHDP_post_output = MCMC_run,
                         gene_list = Y_genes)
 
+```

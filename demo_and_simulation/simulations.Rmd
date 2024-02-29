@@ -1,4 +1,19 @@
-#--------------------------------------- Simulation 1 ----------------------------------------
+---
+title: "simulations"
+author: "Jinlu Liu"
+date: '2024-02-29'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE, eval = FALSE)
+```
+
+### Simulation 1
+
+```{r}
+
+library(extraDistr)
 
 set.seed(2)
 
@@ -51,21 +66,11 @@ sim_data1 <- lapply(1:D,
                                        ncol = C[d])
 
 )
+```
 
+#### Simulation 2
 
-
-
-
-
-
-
-
-
-
-
-#------------------------------------------ Simulation 2 ---------------------------------------------------
-
-
+```{r}
 sim2_beta <- sim1_beta
 sim2_Z <- sim1_z
 sim2_mu <- sim1_mu
@@ -86,18 +91,10 @@ sim_data2 <- lapply(1:D,
                                        ncol = C[d])
 
 )
+```
 
-
-
-
-
-
-
-
-
-
-
-#--------------------------------------- Simulation 3 ------------------------------------------
+#### Simulation 3
+```{r}
 
 D <- 2
 G <- 150
@@ -176,3 +173,4 @@ sim_data3 <- lapply(1:D,
                                        ncol = C[d])
 
 )
+```
