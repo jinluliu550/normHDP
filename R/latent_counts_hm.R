@@ -7,7 +7,7 @@ latent_counts <- function(Y,
 
   ##-- Dimensions
   D <- length(Y)
-  C <- sapply(Y, ncol)
+  C <- sapply(1:D, function(d){ncol(Y[[d]])})
   G <- nrow(Y[[1]])
   J <- normHDP_post_output$J
 
